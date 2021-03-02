@@ -5,14 +5,14 @@ import mineopoly_three.graphics.UserInterface;
 import mineopoly_three.replay.Replay;
 import mineopoly_three.replay.ReplayIO;
 import mineopoly_three.strategy.*;
-import mineopoly_three.strategy.ChuStrategy.ChuStrategy;
+import mineopoly_three.strategy.ChuStrategy;
 
 import javax.swing.*;
 
 public class MineopolyMain {
     private static final int DEFAULT_BOARD_SIZE = 32;
     private static final int PREFERRED_GUI_WIDTH = 750; // Bump this up or down according to your screen size
-    private static final boolean TEST_STRATEGY_WIN_PERCENT = false; // Change to true to test your win percent
+    private static final boolean TEST_STRATEGY_WIN_PERCENT = true; // Change to true to test your win percent
 
     // Use this if you want to view a past match replay
     private static final String savedReplayFilePath = null;
@@ -21,7 +21,7 @@ public class MineopolyMain {
 
     public static void main(String[] args) {
         if (TEST_STRATEGY_WIN_PERCENT) {
-            MinePlayerStrategy yourStrategy = new ChuStrategy(); // TODO: Replace this with your strategy
+            MinePlayerStrategy yourStrategy = new ChuStrategy();
             int[] assignmentBoardSizes = new int[]{14, 20, 26, 32};
 
             for (int testBoardSize : assignmentBoardSizes) {
@@ -38,7 +38,7 @@ public class MineopolyMain {
         final GameEngine gameEngine;
         if (savedReplayFilePath == null) {
             // Not viewing a replay, play a game with a GUI instead
-            MinePlayerStrategy redStrategy = new ChuStrategy(); // TODO: Replace this with your strategy
+            MinePlayerStrategy redStrategy = new ChuStrategy();
             MinePlayerStrategy blueStrategy = new RandomStrategy();
             long randomSeed = System.currentTimeMillis();
             gameEngine = new GameEngine(DEFAULT_BOARD_SIZE, redStrategy, blueStrategy, randomSeed);
@@ -69,14 +69,13 @@ public class MineopolyMain {
 
     private static double getStrategyWinPercent(MinePlayerStrategy yourStrategy, int boardSize) {
 
-        final int numTotalRounds = 10000;
+        final int numTotalRounds = 1000;
         int numRoundsWonByMinScore = 0;
 
         final GameEngine gameEngine;
-        MinePlayerStrategy redStrategy = yourStrategy;
         MinePlayerStrategy blueStrategy = new RandomStrategy();
         long randomSeed = System.currentTimeMillis();
-        gameEngine = new GameEngine(DEFAULT_BOARD_SIZE, redStrategy, blueStrategy, randomSeed);
+        gameEngine = new GameEngine(DEFAULT_BOARD_SIZE, yourStrategy, blueStrategy, randomSeed);
 
         for(int i = 0; i < numTotalRounds; i++) {
             randomSeed = System.currentTimeMillis();
@@ -87,7 +86,8 @@ public class MineopolyMain {
             }
         }
 
-        return ((double) numRoundsWonByMinScore) / numTotalRounds; // TODO: Uncomment this line
+        System.out.println(numRoundsWonByMinScore);
+        return ((double) numRoundsWonByMinScore) / numTotalRounds;
     }
 
     private static boolean yourStrategyWon(GameEngine targetEngine) {
