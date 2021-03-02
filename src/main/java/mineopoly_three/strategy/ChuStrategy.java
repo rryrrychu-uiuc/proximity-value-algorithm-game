@@ -19,6 +19,7 @@ public class ChuStrategy implements MinePlayerStrategy {
     private ArrayList<Point> rechargeStationLocations;
     private ArrayList<Point> shopLocations;
     private ArrayList<Ore> allOres;
+    private ArrayList<TurnAction> actionsToTake;
 
 
     @Override
@@ -29,6 +30,7 @@ public class ChuStrategy implements MinePlayerStrategy {
         this.maxCharge = maxCharge;
         this.winningScore = winningScore;
         this.isRedPlayer = isRedPlayer;
+        actionsToTake = new ArrayList<>();
 
         getKeyLocations(startingBoard, boardSize);
     }
@@ -55,6 +57,49 @@ public class ChuStrategy implements MinePlayerStrategy {
     @Override
     public void endRound(int pointsScored, int opponentPointsScored) {
 
+    }
+
+    /* find the closest point in an arrayList of points */
+    private Point getClosestPoint(Point currentLocation, ArrayList<Point> pointsToCheck) {
+
+        Point closestPoint = null;
+        int smallestDistance = Integer.MAX_VALUE;
+        for(Point targetPoint: pointsToCheck) {
+            int distance = Distance.getDistanceBetweenPoints(currentLocation, targetPoint).getMagnitude();
+            if(distance < smallestDistance) {
+                smallestDistance = distance;
+                closestPoint = targetPoint;
+            }
+        }
+
+        return closestPoint;
+    }
+
+    /* given two points, find the optimal path between them */
+    private void getDirectionsToNewLocation(Point currentLocation, Point newLocation) {
+
+        addDirectionsToDesiredActions(currentLocation.getX() - newLocation.getX(), TurnAction.MOVE_RIGHT, TurnAction.MOVE_LEFT);
+        addDirectionsToDesiredActions(currentLocation.getY() - newLocation.getY(), TurnAction.MOVE_UP, TurnAction.MOVE_DOWN);
+    }
+
+    /* add optimal directions to actions that need to be taken */
+    private void addDirectionsToDesiredActions(double netDirection, TurnAction positiveAction, TurnAction negativeAction) {
+
+        TurnAction actionsToAdd;
+        int increment;
+
+        if(netDirection > 0) {
+            actionsToAdd = negativeAction;
+            increment = -1;
+        } else {
+            actionsToAdd = positiveAction;
+            increment = 1;
+        }
+
+        while(netDirection != 0) {
+            actionsToTake.add(actionsToAdd);
+            netDirection += increment;
+        }
     }
 
     /* instantiates arraylist for all of the key tiles on the board */
@@ -88,6 +133,6 @@ public class ChuStrategy implements MinePlayerStrategy {
 
     /* check if the correct shop*/
     public boolean isCorrectShopColor(TileType shopType) {
-        return (isRedPlayer && shopType.equals(TileType.RED_MARKET)) || (!isRedPlayer && shopType.equals(TileType.BLUE_MARKET));
+        return (shopType.equals(TileType.RED_MARKET) && isRedPlayer) || (shopType.equals(TileType.BLUE_MARKET) && !isRedPlayer );
     }
 }
