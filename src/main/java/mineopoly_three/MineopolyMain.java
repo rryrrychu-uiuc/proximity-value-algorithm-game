@@ -5,11 +5,12 @@ import mineopoly_three.graphics.UserInterface;
 import mineopoly_three.replay.Replay;
 import mineopoly_three.replay.ReplayIO;
 import mineopoly_three.strategy.*;
+import mineopoly_three.strategy.ChuStrategy.ChuStrategy;
 
 import javax.swing.*;
 
 public class MineopolyMain {
-    private static final int DEFAULT_BOARD_SIZE = 20;
+    private static final int DEFAULT_BOARD_SIZE = 32;
     private static final int PREFERRED_GUI_WIDTH = 750; // Bump this up or down according to your screen size
     private static final boolean TEST_STRATEGY_WIN_PERCENT = false; // Change to true to test your win percent
 
@@ -20,7 +21,7 @@ public class MineopolyMain {
 
     public static void main(String[] args) {
         if (TEST_STRATEGY_WIN_PERCENT) {
-            MinePlayerStrategy yourStrategy = new RandomStrategy(); // TODO: Replace this with your strategy
+            MinePlayerStrategy yourStrategy = new ChuStrategy(); // TODO: Replace this with your strategy
             int[] assignmentBoardSizes = new int[]{14, 20, 26, 32};
 
             for (int testBoardSize : assignmentBoardSizes) {
@@ -37,7 +38,7 @@ public class MineopolyMain {
         final GameEngine gameEngine;
         if (savedReplayFilePath == null) {
             // Not viewing a replay, play a game with a GUI instead
-            MinePlayerStrategy redStrategy = new RandomStrategy(); // TODO: Replace this with your strategy
+            MinePlayerStrategy redStrategy = new ChuStrategy(); // TODO: Replace this with your strategy
             MinePlayerStrategy blueStrategy = new RandomStrategy();
             long randomSeed = System.currentTimeMillis();
             gameEngine = new GameEngine(DEFAULT_BOARD_SIZE, redStrategy, blueStrategy, randomSeed);
@@ -67,17 +68,34 @@ public class MineopolyMain {
     }
 
     private static double getStrategyWinPercent(MinePlayerStrategy yourStrategy, int boardSize) {
-        final int numTotalRounds = 1000;
+
+        final int numTotalRounds = 10000;
         int numRoundsWonByMinScore = 0;
-        MinePlayerStrategy randomStrategy = new RandomStrategy();
 
-        /*
-         * TODO: Fill in the code here to play 1000 games and calculate your strategy's win percent
-         * Note that you should only count a win if your strategy scores enough points to win
-         *  by the minimum score. Do not count wins as scoring more than RandomStrategy() (which always scores 0)
-         */
+        final GameEngine gameEngine;
+        MinePlayerStrategy redStrategy = yourStrategy;
+        MinePlayerStrategy blueStrategy = new RandomStrategy();
+        long randomSeed = System.currentTimeMillis();
+        gameEngine = new GameEngine(DEFAULT_BOARD_SIZE, redStrategy, blueStrategy, randomSeed);
 
-        throw new RuntimeException("Testing win percent not yet implemented"); // TODO: Delete this line
-        //return ((double) numRoundsWonByMinScore) / numTotalRounds; // TODO: Uncomment this line
+        for(int i = 0; i < numTotalRounds; i++) {
+            randomSeed = System.currentTimeMillis();
+            gameEngine.reset(boardSize, randomSeed, true);
+            gameEngine.runGame();
+            if(yourStrategyWon(gameEngine)) {
+                numRoundsWonByMinScore++;
+            }
+        }
+
+        return ((double) numRoundsWonByMinScore) / numTotalRounds; // TODO: Uncomment this line
+    }
+
+    private static boolean yourStrategyWon(GameEngine targetEngine) {
+
+        boolean hasMoreThanMinScore = targetEngine.getRedPlayerScore() >= targetEngine.getMinScoreToWin();
+        boolean hasMorePoints = targetEngine.getRedPlayerScore() > targetEngine.getBluePlayerScore();
+
+        return hasMoreThanMinScore && hasMorePoints;
+
     }
 }
