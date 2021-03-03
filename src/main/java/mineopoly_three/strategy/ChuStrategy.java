@@ -30,6 +30,9 @@ public class ChuStrategy implements MinePlayerStrategy {
 
     private OrePriorityComparator comparePriority;
 
+    private Point previousLocation;
+    private TurnAction previousAction;
+
     @Override
     public void initialize(int boardSize, int maxInventorySize, int maxCharge, int winningScore, PlayerBoardView startingBoard, Point startTileLocation, boolean isRedPlayer, Random random) {
 
@@ -40,6 +43,7 @@ public class ChuStrategy implements MinePlayerStrategy {
         this.isRedPlayer = isRedPlayer;
         referencePoint = new Point(boardSize/2, boardSize/2);
         comparePriority = new OrePriorityComparator();
+        previousLocation = startingBoard.getYourLocation();
 
         currentPrices = new HashMap<>();
         actionsToTake = new ArrayList<>();
@@ -53,12 +57,34 @@ public class ChuStrategy implements MinePlayerStrategy {
     public TurnAction getTurnAction(PlayerBoardView boardView, Economy economy, int currentCharge, boolean isRedTurn) {
 
         Point currentLocation = boardView.getYourLocation();
+        currentPrices = economy.getCurrentPrices();
 
+       return mineOre(currentLocation);
+    }
 
-       currentPrices = economy.getCurrentPrices();
-       getOptimalOres(currentLocation);
+    /* determine next action to go mine ore*/
+    private TurnAction mineOre(Point currentLocation) {
 
-       return null;
+        if(oresToMine.isEmpty()) {
+            getOptimalOres(currentLocation);
+        }
+
+        Ore toMine = getClosestOre(currentLocation, oresToMine);
+        getDirectionsToNewLocation(currentLocation, toMine.getLocation());
+
+        for(int i = 0; i < toMine.getTurnsToMine(); i++) {
+            actionsToTake.add(TurnAction.MINE);
+        }
+        actionsToTake.add(TurnAction.PICK_UP_RESOURCE);
+
+        return updateAction(currentLocation);
+    }
+
+    /* saves previousLocation and action then updates action*/
+    private TurnAction updateAction(Point currentLocation) {
+        previousAction = actionsToTake.remove(0);
+        previousLocation = currentLocation;
+        return previousAction;
     }
 
     @Override
@@ -116,6 +142,7 @@ public class ChuStrategy implements MinePlayerStrategy {
         }
     }
 
+    /* adds the highest value ores to ores to mine*/
     private void getOptimalOres(Point currentLocation) {
 
         double locationAngle = Vector.getAngleFromReference(referencePoint, currentLocation);
@@ -138,6 +165,23 @@ public class ChuStrategy implements MinePlayerStrategy {
             int sellValue = currentPrices.get(toUpdate.getResourceType());
             toUpdate.setOrePriority(sellValue, currentLocation);
         }
+    }
+
+    /* given a location and an array of ores, retrieve the closest ore */
+    private Ore getClosestOre(Point currentLocation, ArrayList<Ore> oresToCheck) {
+
+        int closestOreIndex = 0;
+        int smallestDistance = Integer.MAX_VALUE;
+        for(Ore targetOre: oresToCheck) {
+            Point oreLocation = targetOre.getLocation();
+            int distance = Distance.getDistanceBetweenPoints(currentLocation, oreLocation).getMagnitude();
+            if(distance < smallestDistance) {
+                smallestDistance = distance;
+                closestOreIndex = oresToCheck.indexOf(targetOre);
+            }
+        }
+
+        return oresToCheck.remove(closestOreIndex);
     }
 
     /** Movement Helper Methods */

@@ -38,6 +38,10 @@ public class Ore {
         return resourceType;
     }
 
+    public int getTurnsToMine() {
+        return turnsToMine;
+    }
+
     public void setReferenceAngle(double referenceAngle) {
         this.referenceAngle = referenceAngle;
     }
