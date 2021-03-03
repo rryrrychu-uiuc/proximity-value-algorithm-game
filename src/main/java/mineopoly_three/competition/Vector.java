@@ -22,6 +22,10 @@ public class Vector {
      */
     public static double getAngleFromReference(Point referencePoint, Point target) {
 
+        if(referencePoint == null || target == null) {
+            throw new IllegalArgumentException("Points cannot be null");
+        }
+
         Vector referenceVector = new Vector(0,1);
         double xComp = target.getX()-referencePoint.getX();
         double yComp = target.getY()-referencePoint.getY();
@@ -37,6 +41,10 @@ public class Vector {
      * @return a double representing the angle between the reference vector and the target vector
      */
     public static double getAngleBetweenVectors(Vector reference, Vector target) {
+
+        if(reference == null || target == null) {
+            throw new IllegalArgumentException("Vectors cannot be null");
+        }
 
         double angleToReturn = 0;
         double dotProduct = Vector.getDotProduct(reference, target);
@@ -58,6 +66,10 @@ public class Vector {
      * @return the sum of the product of the components of the vectors
      */
     public static double getDotProduct(Vector reference, Vector target) {
+
+        if(reference == null || target == null) {
+            throw new IllegalArgumentException("Vectors cannot be null");
+        }
 
         double xProduct = reference.getXComponent() * target.getXComponent();
         double yProduct = reference.getYComponent() * target.getYComponent();

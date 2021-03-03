@@ -24,6 +24,10 @@ public class Distance {
      */
     public static Distance getDistanceBetweenPoints(Point firstLocation, Point secondLocation) {
 
+        if(firstLocation == null || secondLocation == null) {
+            throw new IllegalArgumentException("Points cannot be null");
+        }
+
         int xDist = (int)(firstLocation.getX() - secondLocation.getX());
         int yDist = (int)(firstLocation.getY() - secondLocation.getY());
 

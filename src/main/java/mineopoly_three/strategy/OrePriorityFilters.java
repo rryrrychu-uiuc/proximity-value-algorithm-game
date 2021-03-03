@@ -14,6 +14,10 @@ public class OrePriorityFilters implements Comparator<Ore> {
      */
     public static ArrayList<Ore> filterByReferenceAngle(double referenceAngle, double offset, ArrayList<Ore> toFilter) {
 
+        if(toFilter == null || toFilter.size() == 0) {
+            throw new IllegalArgumentException("Cannot filter empty set");
+        }
+
         ArrayList<Ore> oresToReturn = new ArrayList<>();
 
         double lowerBound = referenceAngle - offset;
