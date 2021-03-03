@@ -10,6 +10,6 @@ public class OrePriorityComparator implements Comparator<Ore> {
         double targetValue = targetOre.getOrePriority();
         double otherValue = otherOre.getOrePriority();
 
-        return Double.compare(otherValue, targetValue);
+        return Double.compare(targetValue, otherValue);
     }
 }

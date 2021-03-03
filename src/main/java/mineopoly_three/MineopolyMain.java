@@ -10,9 +10,9 @@ import mineopoly_three.strategy.ChuStrategy;
 import javax.swing.*;
 
 public class MineopolyMain {
-    private static final int DEFAULT_BOARD_SIZE = 32;
-    private static final int PREFERRED_GUI_WIDTH = 750; // Bump this up or down according to your screen size
-    private static final boolean TEST_STRATEGY_WIN_PERCENT = true; // Change to true to test your win percent
+    private static final int DEFAULT_BOARD_SIZE = 40;
+    private static final int PREFERRED_GUI_WIDTH = 650; // Bump this up or down according to your screen size
+    private static final boolean TEST_STRATEGY_WIN_PERCENT = false; // Change to true to test your win percent
 
     // Use this if you want to view a past match replay
     private static final String savedReplayFilePath = null;
@@ -76,17 +76,17 @@ public class MineopolyMain {
         MinePlayerStrategy blueStrategy = new RandomStrategy();
         long randomSeed = System.currentTimeMillis();
         gameEngine = new GameEngine(DEFAULT_BOARD_SIZE, yourStrategy, blueStrategy, randomSeed);
-
+        int averageScore = 0;
         for(int i = 0; i < numTotalRounds; i++) {
             randomSeed = System.currentTimeMillis();
-            gameEngine.reset(boardSize, randomSeed, true);
+            gameEngine.reset(boardSize, randomSeed, false);
             gameEngine.runGame();
-            if(yourStrategyWon(gameEngine)) {
+            averageScore += gameEngine.getRedPlayerScore();
+            if(gameEngine.getRedPlayerScore() >= gameEngine.getMinScoreToWin()) {
                 numRoundsWonByMinScore++;
             }
         }
 
-        System.out.println(numRoundsWonByMinScore);
         return ((double) numRoundsWonByMinScore) / numTotalRounds;
     }
 
