@@ -2,15 +2,32 @@ package mineopoly_three.strategy;
 
 import java.awt.*;
 
+/**
+ * Distance class to organize code and calculate Manhattan distances between points
+ */
 public class Distance {
-    private int xDistance;
-    private int yDistance;
-    private int magnitude;
+    private final int xDistance;
+    private final int yDistance;
+    private final int magnitude;
 
     public Distance(int x, int y) {
         xDistance = x;
         yDistance = y;
         magnitude = Math.abs(xDistance) + Math.abs(yDistance);
+    }
+
+    /**
+     * Returns the distance between two given points
+     * @param firstLocation location of the first point
+     * @param secondLocation location of the second point
+     * @return a distance variable that contains different distance stats
+     */
+    public static Distance getDistanceBetweenPoints(Point firstLocation, Point secondLocation) {
+
+        int xDist = (int)(firstLocation.getX() - secondLocation.getX());
+        int yDist = (int)(firstLocation.getY() - secondLocation.getY());
+
+        return new Distance(xDist, yDist);
     }
 
     public int getXDistance() {
@@ -33,14 +50,6 @@ public class Distance {
         }
 
         return false;
-    }
-
-    public static Distance getDistanceBetweenPoints(Point currentLocation, Point otherLocation) {
-
-        int xDist = (int)(currentLocation.getX() - otherLocation.getX());
-        int yDist = (int)(currentLocation.getY() - otherLocation.getY());
-
-        return new Distance(xDist, yDist);
     }
 
 }

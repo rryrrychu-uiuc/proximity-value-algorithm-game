@@ -4,36 +4,14 @@ import java.awt.*;
 
 public class Vector {
 
-    private double xComponent;
-    private double yComponent;
-    private double magnitude;
+    private final double xComponent;
+    private final double yComponent;
+    private final double magnitude;
 
     public Vector(double x, double y) {
         xComponent = x;
         yComponent = y;
         magnitude = Math.hypot(xComponent, yComponent);
-    }
-
-    public double getXComponent() {
-        return xComponent;
-    }
-
-    public double getYComponent() {
-        return yComponent;
-    }
-
-    public double getSize() {
-        return magnitude;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-
-        if(o instanceof Vector targetVector) {
-            return magnitude == targetVector.getSize();
-        }
-
-        return false;
     }
 
     /**
@@ -85,5 +63,27 @@ public class Vector {
         double yProduct = reference.getYComponent() * target.getYComponent();
 
         return xProduct + yProduct;
+    }
+
+    public double getXComponent() {
+        return xComponent;
+    }
+
+    public double getYComponent() {
+        return yComponent;
+    }
+
+    public double getSize() {
+        return magnitude;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+
+        if(o instanceof Vector targetVector) {
+            return magnitude == targetVector.magnitude;
+        }
+
+        return false;
     }
 }

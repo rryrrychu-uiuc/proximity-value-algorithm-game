@@ -7,378 +7,412 @@ import mineopoly_three.item.ItemType;
 import mineopoly_three.tiles.TileType;
 
 import java.awt.*;
-import java.lang.reflect.Array;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
 
 /**
- * ChuStrategy is a strategy for playing Mineopoloy that attempts to target ores based off of clustering
- * The priority of an ore is calculated by the weighted current price in the economy and the percentage
- * away the ore is from the current location. That means that the closer the ore is, the higher priority
- * it is. Then based off of the angle of the high priority ore, it finds ores within a offset angle away
- * because if the angle of the ore from a reference point is similar, they must be close.
+ * ChuStrategy is a strategy for playing Mineopoloy that attempts to target ores based off of
+ * clustering The priority of an ore is calculated by the weighted current price in the economy and
+ * the percentage away the ore is from the current location. That means that the closer the ore is,
+ * the higher priority it is. Then based off of the angle of the high priority ore, it finds ores
+ * within a offset angle away because if the angle of the ore from a reference point is similar,
+ * they must be close.
  */
 public class ChuStrategy implements MinePlayerStrategy {
 
-    private static final double OFFSET_PROXIMITY = 45;
+  private static final double OFFSET_PROXIMITY = 45;
 
-    private int maxInventorySize;
-    private int maxCharge;
-    private int winningScore;
-    private int inventoryWorth;
-    private int remainingInventorySlots;
+  private int maxInventorySize;
+  private int maxCharge;
+  private int winningScore;
+  private int inventoryWorth;
+  private int remainingInventorySlots;
 
-    private boolean isRedPlayer;
-    private boolean hasTask;
-    private boolean isRecharging;
+  private boolean isRedPlayer;
+  private boolean hasTask;
+  private boolean isRecharging;
 
-    private Point previousLocation;
-    private TurnAction previousAction;
+  private Point previousLocation;
+  private Point currentLocation;
+  private TurnAction previousAction;
 
-    private Map<ItemType, Integer> currentPrices;
-    private ArrayList<Point> rechargeStationLocations;
-    private ArrayList<Point> shopLocations;
-    private ArrayList<Ore> allOres;
-    private ArrayList<Ore> oresToMine;
-    private ArrayList<TurnAction> actionsToTake;
-    private OrePriorityComparator comparePriority;
+  private Map<ItemType, Integer> currentPrices;
+  private ArrayList<Point> rechargeStationLocations;
+  private ArrayList<Point> shopLocations;
+  private ArrayList<Ore> allOres;
+  private ArrayList<Ore> oresToMine;
+  private ArrayList<TurnAction> actionsToTake;
+  private OrePriorityFilters comparePriority;
 
-    @Override
-    public void initialize(int boardSize, int maxInventorySize, int maxCharge, int winningScore, PlayerBoardView startingBoard, Point startTileLocation, boolean isRedPlayer, Random random) {
-        System.out.println(winningScore);
-        this.maxInventorySize = maxInventorySize;
-        this.maxCharge = maxCharge;
-        this.winningScore = winningScore;
-        this.isRedPlayer = isRedPlayer;
-        comparePriority = new OrePriorityComparator();
-        previousLocation = startingBoard.getYourLocation();
-        remainingInventorySlots = maxInventorySize;
+  @Override
+  public void initialize(
+      int boardSize,
+      int maxInventorySize,
+      int maxCharge,
+      int winningScore,
+      PlayerBoardView startingBoard,
+      Point startTileLocation,
+      boolean isRedPlayer,
+      Random random) {
 
-        currentPrices = new HashMap<>();
-        actionsToTake = new ArrayList<>();
-        oresToMine = new ArrayList<>();
+    this.maxInventorySize = maxInventorySize;
+    this.winningScore = winningScore;
+    this.maxCharge = maxCharge;
+    this.isRedPlayer = isRedPlayer;
+    remainingInventorySlots = maxInventorySize;
 
-        initializeKeyLocations(startingBoard, boardSize);
-        assignOreReferenceLocation(boardSize);
+    comparePriority = new OrePriorityFilters();
+    previousLocation = startingBoard.getYourLocation();
+
+    currentPrices = new HashMap<>();
+    actionsToTake = new ArrayList<>();
+    oresToMine = new ArrayList<>();
+
+    initializeKeyLocations(startingBoard, boardSize);
+    assignOreReferenceLocation(boardSize);
+  }
+
+  @Override
+  public TurnAction getTurnAction(
+      PlayerBoardView boardView, Economy economy, int currentCharge, boolean isRedTurn) {
+
+    currentLocation = boardView.getYourLocation();
+    currentPrices = economy.getCurrentPrices();
+
+    if (hasNotMoved()) {
+      return previousAction;
     }
 
-    @Override
-    public TurnAction getTurnAction(PlayerBoardView boardView, Economy economy, int currentCharge, boolean isRedTurn) {
+    TurnAction movementAction = alreadyHasAction();
+    if (movementAction != null) {
+      return movementAction;
+    }
 
-        Point currentLocation = boardView.getYourLocation();
-        currentPrices = economy.getCurrentPrices();
+    TileType currentTile = boardView.getTileTypeAtLocation(currentLocation);
+    specialTileAction(currentTile);
 
-        if(hasNotMoved(currentLocation)) {
-            return previousAction;
+    TurnAction rechargeAction = recharge(currentCharge);
+    if (rechargeAction == null) {
+      return null;
+    } else if (!rechargeAction.equals(TurnAction.MINE)) {
+      return rechargeAction;
+    }
+
+    TurnAction sellAction = sellItems();
+    if (sellAction != null) {
+      return sellAction;
+    }
+
+    return mineOre();
+  }
+
+  @Override
+  public void onReceiveItem(InventoryItem itemReceived) {
+    remainingInventorySlots--;
+    updateInventoryWorth(itemReceived.getItemType());
+  }
+
+  @Override
+  public void onSoldInventory(int totalSellPrice) {
+    remainingInventorySlots = maxInventorySize;
+    inventoryWorth = 0;
+    winningScore -= totalSellPrice;
+  }
+
+  @Override
+  public String getName() {
+    return "ChuStrategy";
+  }
+
+  @Override
+  public void endRound(int pointsScored, int opponentPointsScored) {}
+
+  /* instantiates arraylist for all of the key tiles on the board */
+  private void initializeKeyLocations(PlayerBoardView currentBoard, int boardSize) {
+
+    rechargeStationLocations = new ArrayList<>();
+    shopLocations = new ArrayList<>();
+    allOres = new ArrayList<>();
+
+    for (int row = 0; row < boardSize; row++) {
+      for (int col = 0; col < boardSize; col++) {
+
+        Point targetLocation = new Point(row, col);
+        TileType targetTile = currentBoard.getTileTypeAtLocation(targetLocation);
+
+        if (targetTile.equals(TileType.RECHARGE)) {
+          rechargeStationLocations.add(targetLocation);
+        } else if (isCorrectShopColor(targetTile)) {
+          shopLocations.add(targetLocation);
+        } else if (isOre(targetTile)) {
+          allOres.add(new Ore(targetLocation, boardSize, targetTile));
         }
+      }
+    }
+  }
 
-        TurnAction movementAction = alreadyHasAction(currentLocation);
-        if(movementAction != null) {
-            return movementAction;
-        }
+  /** TurnAction Helper Methods */
 
-        TileType currentTile = boardView.getTileTypeAtLocation(currentLocation);
-        specialTileAction(currentTile, currentLocation);
+  // checks if theres already an action
+  private TurnAction alreadyHasAction() {
 
-        TurnAction rechargeAction = checkRecharge(currentCharge, currentLocation);
-        if(rechargeAction == null) {
-            return null;
-        } else if(!rechargeAction.equals(TurnAction.MINE)) {
-            return rechargeAction;
-        }
-
-        TurnAction sellAction = sellItems(currentLocation);
-        if(sellAction != null) {
-            return sellAction;
-        }
-
-        if(oresToMine.isEmpty()) {
-            getOptimalOres(findValuableOre(currentLocation));
-        }
-
-        hasTask = true;
-        Ore toMine = getClosestOre(currentLocation, oresToMine);
-        getDirectionsToNewLocation(currentLocation, toMine.getLocation());
-
-        for(int i = 0; i < toMine.getTurnsToMine(); i++) {
-            actionsToTake.add(TurnAction.MINE);
-        }
-        actionsToTake.add(TurnAction.PICK_UP_RESOURCE);
-
-        return updateAction(currentLocation);
+    if (actionsToTake.isEmpty()) {
+      return null;
     }
 
-    @Override
-    public void onReceiveItem(InventoryItem itemReceived) {
-        remainingInventorySlots--;
-        updateInventoryWorth(itemReceived.getItemType());
+    if (hasTask) {
+      hasTask = !(actionsToTake.size() == 1);
+      return updateAction();
     }
 
-    @Override
-    public void onSoldInventory(int totalSellPrice) {
-        remainingInventorySlots = maxInventorySize;
-        inventoryWorth = 0;
-        winningScore -= totalSellPrice;
+    return null;
+  }
+
+  /* checks an recharges the robot*/
+  private TurnAction recharge(int currentCharge) {
+
+    if (isRecharging && currentCharge != maxCharge) {
+      return null;
+    } else if (currentCharge == maxCharge) {
+      getOptimalOres(findValuableOre());
+      isRecharging = false;
     }
 
-    @Override
-    public String getName() {
-        return "ChuStrategy";
+    if (isAlmostOutOfCharge(currentCharge)) {
+      return updateAction();
     }
 
-    @Override
-    public void endRound(int pointsScored, int opponentPointsScored) {
+    return TurnAction.MINE;
+  }
 
+  /* checks if inventory is full*/
+  private TurnAction sellItems() {
+
+    if (remainingInventorySlots == 0 || inventoryWorth >= winningScore) {
+      Point desiredShop = getClosestPoint(currentLocation, shopLocations);
+      getDirectionsToNewLocation(desiredShop);
+      hasTask = true;
+      return updateAction();
     }
 
-    /* instantiates arraylist for all of the key tiles on the board */
-    private void initializeKeyLocations(PlayerBoardView currentBoard, int boardSize) {
+    return null;
+  }
 
-        rechargeStationLocations = new ArrayList<>();
-        shopLocations = new ArrayList<>();
-        allOres = new ArrayList<>();
+  /* goes through process of determining and going to ore */
+  private TurnAction mineOre() {
 
-        for(int row = 0; row < boardSize; row++) {
-            for(int col = 0; col < boardSize; col++) {
-
-                Point targetLocation = new Point(row, col);
-                TileType targetTile = currentBoard.getTileTypeAtLocation(targetLocation);
-
-                if (targetTile.equals(TileType.RECHARGE)){
-                    rechargeStationLocations.add(targetLocation);
-                } else if (isCorrectShopColor(targetTile)) {
-                    shopLocations.add(targetLocation);
-                } else if(isOre(targetTile)) {
-                    allOres.add(new Ore(targetLocation,boardSize,targetTile));
-                }
-            }
-        }
+    if (oresToMine.isEmpty()) {
+      getOptimalOres(findValuableOre());
     }
 
-    /** TurnAction Helper Methods */
+    Ore toMine = getClosestOre(oresToMine);
+    getDirectionsToNewLocation(toMine.getLocation());
 
-    //checks if theres already an action
-    private TurnAction alreadyHasAction(Point currentLocation) {
+    // adds actions to mine/pickup ore
+    for (int i = 0; i < toMine.getTurnsToMine(); i++) {
+      actionsToTake.add(TurnAction.MINE);
+    }
+    actionsToTake.add(TurnAction.PICK_UP_RESOURCE);
 
-        if(actionsToTake.isEmpty()) {
-            return null;
-        }
+    hasTask = true;
+    return updateAction();
+  }
 
-        if(hasTask) {
-            hasTask = !(actionsToTake.size() == 1);
-            return updateAction(currentLocation);
-        }
+  /* saves previousLocation and action then updates action*/
+  private TurnAction updateAction() {
+    previousAction = actionsToTake.remove(0);
+    previousLocation = currentLocation;
+    return previousAction;
+  }
 
-        return null;
+  /* assigns specific actions for specific tiles */
+  private void specialTileAction(TileType currentTile) {
+
+    if (currentTile.equals(TileType.RECHARGE)) {
+      isRecharging = true;
     }
 
-    /* checks if inventory is full*/
-    private TurnAction sellItems(Point currentLocation) {
+    if (currentTile.equals(getCorrectShop())) {
+      getOptimalOres(findValuableOre());
+    }
+  }
 
-        if(remainingInventorySlots == 0 || inventoryWorth >= winningScore) {
-            Point desiredShop = getClosestPoint(currentLocation, shopLocations);
-            getDirectionsToNewLocation(currentLocation, desiredShop);
-            hasTask = true;
-            return updateAction(currentLocation);
-        }
+  /** Charging Helper Methods */
+  private boolean isAlmostOutOfCharge(int currentCharge) {
 
-        return null;
+    Point closestRecharge = getClosestPoint(currentLocation, rechargeStationLocations);
+    Distance distanceFromRecharge =
+        Distance.getDistanceBetweenPoints(closestRecharge, currentLocation);
+    if (currentCharge <= 1.5 * distanceFromRecharge.getMagnitude()) {
+      getDirectionsToNewLocation(closestRecharge);
+      hasTask = true;
+      return true;
     }
 
-    private TurnAction checkRecharge(int currentCharge, Point currentLocation) {
+    return false;
+  }
 
-        if(isRecharging && currentCharge != maxCharge) {
-            return null;
-        } else if(currentCharge == maxCharge) {
-            getOptimalOres(findValuableOre(currentLocation));
-            isRecharging = false;
-        }
+  /** Shopping Helper Methods */
 
-        if(isAlmostOutOfCharge(currentLocation, currentCharge)) {
-            return updateAction(currentLocation);
-        }
+  private void updateInventoryWorth(ItemType obtainedItem) {
 
-        return TurnAction.MINE;
+    inventoryWorth += currentPrices.get(obtainedItem);
+  }
+
+  /** Ore Helper Methods */
+
+  /* determine the angle the ore is at in reference to the center*/
+  private void assignOreReferenceLocation(int boardSize) {
+
+    Point referencePoint = new Point(boardSize / 2, boardSize / 2);
+    for (Ore targetOre : allOres) {
+      Point oreLocation = targetOre.getLocation();
+      double referenceAngle = Vector.getAngleFromReference(referencePoint, oreLocation);
+      targetOre.setReferenceAngle(referenceAngle);
+    }
+  }
+
+  /* adds the highest value ores to ores to mine*/
+  private void getOptimalOres(Ore valueOre) {
+
+    oresToMine.add(valueOre);
+    ArrayList<Ore> closeAngles =
+        OrePriorityFilters.filterByReferenceAngle(
+            valueOre.getReferenceAngle(), OFFSET_PROXIMITY, allOres);
+    closeAngles.sort(comparePriority);
+
+    for (int i = closeAngles.size() - 1; i >= 0; i--) {
+      oresToMine.add(closeAngles.get(i));
+      allOres.remove(closeAngles.get(i));
+    }
+  }
+
+  /* sets ore priority given location and prices*/
+  private void setOrePriority(ArrayList<Ore> targetOres) {
+
+    for (Ore toUpdate : targetOres) {
+
+      int sellValue = currentPrices.get(toUpdate.getResourceType());
+      toUpdate.setOrePriority(sellValue, currentLocation);
+    }
+  }
+
+  /* given a location and an array of ores, retrieve the closest ore */
+  private Ore getClosestOre(ArrayList<Ore> oresToCheck) {
+
+    int closestOreIndex = 0;
+    int smallestDistance = Integer.MAX_VALUE;
+    for (Ore targetOre : oresToCheck) {
+      Point oreLocation = targetOre.getLocation();
+      int distance = Distance.getDistanceBetweenPoints(currentLocation, oreLocation).getMagnitude();
+      if (distance < smallestDistance) {
+        smallestDistance = distance;
+        closestOreIndex = oresToCheck.indexOf(targetOre);
+      }
     }
 
-    /* saves previousLocation and action then updates action*/
-    private TurnAction updateAction(Point currentLocation) {
-        previousAction = actionsToTake.remove(0);
-        previousLocation = currentLocation;
-        return previousAction;
+    return oresToCheck.remove(closestOreIndex);
+  }
+
+  private Ore findValuableOre() {
+    clearToMine();
+    setOrePriority(allOres);
+    allOres.sort(comparePriority);
+    return allOres.remove(allOres.size() - 1);
+  }
+
+  private void clearToMine() {
+    for (int i = 0; i < oresToMine.size(); i++) {
+      allOres.add(oresToMine.remove(0));
+    }
+  }
+
+  /** Movement Helper Methods */
+
+  /* find the closest point in an arrayList of points */
+  private Point getClosestPoint(Point startingLocation, ArrayList<Point> pointsToCheck) {
+
+    Point closestPoint = null;
+    int smallestDistance = Integer.MAX_VALUE;
+    for (Point targetPoint : pointsToCheck) {
+      int distance =
+          Distance.getDistanceBetweenPoints(startingLocation, targetPoint).getMagnitude();
+      if (distance < smallestDistance) {
+        smallestDistance = distance;
+        closestPoint = targetPoint;
+      }
     }
 
-    /* assigns specific actions for specific tiles */
-    private void specialTileAction(TileType currentTile, Point currentLocation) {
+    return closestPoint;
+  }
 
-        if(currentTile.equals(TileType.RECHARGE)) {
-            isRecharging = true;
-        }
+  /* given two points, find the optimal path between them */
+  private void getDirectionsToNewLocation(Point newLocation) {
 
-        if(currentTile.equals(getCorrectShop())) {
-            getOptimalOres(findValuableOre(currentLocation));
-        }
+    addDirectionsToDesiredActions(
+        currentLocation.getX() - newLocation.getX(), TurnAction.MOVE_RIGHT, TurnAction.MOVE_LEFT);
+    addDirectionsToDesiredActions(
+        currentLocation.getY() - newLocation.getY(), TurnAction.MOVE_UP, TurnAction.MOVE_DOWN);
+  }
+
+  /* add optimal directions to actions that need to be taken */
+  private void addDirectionsToDesiredActions(
+      double netDirection, TurnAction positiveAction, TurnAction negativeAction) {
+
+    TurnAction actionsToAdd;
+    int increment;
+
+    if (netDirection > 0) {
+      actionsToAdd = negativeAction;
+      increment = -1;
+    } else {
+      actionsToAdd = positiveAction;
+      increment = 1;
     }
 
-    /** Charging Helper Methods */
-
-    private boolean isAlmostOutOfCharge(Point currentLocation, int currentCharge) {
-
-        Point closestRecharge = getClosestPoint(currentLocation, rechargeStationLocations);
-        Distance distanceFromRecharge = Distance.getDistanceBetweenPoints(closestRecharge, currentLocation);
-        if(currentCharge <= 1.5*distanceFromRecharge.getMagnitude()) {
-            getDirectionsToNewLocation(currentLocation, closestRecharge);
-            hasTask = true;
-            return true;
-        }
-
-        return false;
+    while (netDirection != 0) {
+      actionsToTake.add(actionsToAdd);
+      netDirection += increment;
     }
+  }
 
-    /** Shopping Helper Methods */
+  private boolean hasNotMoved() {
 
-    private void updateInventoryWorth(ItemType obtainedItem) {
+    return previousAction != null
+        && isMovingAction(previousAction)
+        && currentLocation.equals(previousLocation);
+  }
 
-        inventoryWorth += currentPrices.get(obtainedItem);
+  /** TileType Helper Methods */
+
+  /* check if a tile is an ore */
+  private boolean isOre(TileType toEvaluate) {
+    return toEvaluate.equals(TileType.RESOURCE_DIAMOND)
+        || toEvaluate.equals(TileType.RESOURCE_RUBY)
+        || toEvaluate.equals(TileType.RESOURCE_EMERALD);
+  }
+
+  /* check if the correct shop*/
+  public boolean isCorrectShopColor(TileType shopType) {
+    return (shopType.equals(TileType.RED_MARKET) && isRedPlayer)
+        || (shopType.equals(TileType.BLUE_MARKET) && !isRedPlayer);
+  }
+
+  public boolean isMovingAction(TurnAction targetAction) {
+
+    return targetAction.equals(TurnAction.MOVE_UP)
+        || targetAction.equals(TurnAction.MOVE_DOWN)
+        || targetAction.equals(TurnAction.MOVE_LEFT)
+        || targetAction.equals(TurnAction.MOVE_RIGHT);
+  }
+
+  public TileType getCorrectShop() {
+    if (isRedPlayer) {
+      return TileType.RED_MARKET;
+    } else {
+      return TileType.BLUE_MARKET;
     }
-
-    /** Ore Helper Methods */
-
-    /* determine the angle the ore is at in reference to the center*/
-    private void assignOreReferenceLocation(int boardSize) {
-
-        Point referencePoint = new Point(boardSize/2, boardSize/2);
-        for(Ore targetOre: allOres) {
-            Point oreLocation = targetOre.getLocation();
-            double referenceAngle = Vector.getAngleFromReference(referencePoint, oreLocation);
-            targetOre.setReferenceAngle(referenceAngle);
-        }
-    }
-
-    /* adds the highest value ores to ores to mine*/
-    private void getOptimalOres(Ore valueOre) {
-
-        oresToMine.add(valueOre);
-        ArrayList<Ore> closeAngles = OreFilters.filterByReferenceAngle(valueOre.getReferenceAngle(), OFFSET_PROXIMITY , allOres);
-        closeAngles.sort(comparePriority);
-
-        for(int i = closeAngles.size()-1; i >= 0; i--) {
-            oresToMine.add(closeAngles.get(i));
-            allOres.remove(closeAngles.get(i));
-        }
-    }
-
-    /* sets ore priority given location and prices*/
-    private void setOrePriority(Point currentLocation, ArrayList<Ore> targetOres) {
-
-        for(Ore toUpdate: targetOres) {
-
-            int sellValue = currentPrices.get(toUpdate.getResourceType());
-            toUpdate.setOrePriority(sellValue, currentLocation);
-        }
-    }
-
-    /* given a location and an array of ores, retrieve the closest ore */
-    private Ore getClosestOre(Point currentLocation, ArrayList<Ore> oresToCheck) {
-
-        int closestOreIndex = 0;
-        int smallestDistance = Integer.MAX_VALUE;
-        for(Ore targetOre: oresToCheck) {
-            Point oreLocation = targetOre.getLocation();
-            int distance = Distance.getDistanceBetweenPoints(currentLocation, oreLocation).getMagnitude();
-            if(distance < smallestDistance) {
-                smallestDistance = distance;
-                closestOreIndex = oresToCheck.indexOf(targetOre);
-            }
-        }
-
-        return oresToCheck.remove(closestOreIndex);
-    }
-
-    private Ore findValuableOre(Point currentLocation) {
-        clearToMine();
-        setOrePriority(currentLocation, allOres);
-        allOres.sort(comparePriority);
-        return allOres.remove(allOres.size()-1);
-    }
-
-    private void clearToMine() {
-        for(int i = 0; i < oresToMine.size(); i++) {
-            allOres.add(oresToMine.remove(0));
-        }
-    }
-
-    /** Movement Helper Methods */
-
-    /* find the closest point in an arrayList of points */
-    private Point getClosestPoint(Point currentLocation, ArrayList<Point> pointsToCheck) {
-
-        Point closestPoint = null;
-        int smallestDistance = Integer.MAX_VALUE;
-        for(Point targetPoint: pointsToCheck) {
-            int distance = Distance.getDistanceBetweenPoints(currentLocation, targetPoint).getMagnitude();
-            if(distance < smallestDistance) {
-                smallestDistance = distance;
-                closestPoint = targetPoint;
-            }
-        }
-
-        return closestPoint;
-    }
-
-    /* given two points, find the optimal path between them */
-    private void getDirectionsToNewLocation(Point currentLocation, Point newLocation) {
-
-        addDirectionsToDesiredActions(currentLocation.getX() - newLocation.getX(), TurnAction.MOVE_RIGHT, TurnAction.MOVE_LEFT);
-        addDirectionsToDesiredActions(currentLocation.getY() - newLocation.getY(), TurnAction.MOVE_UP, TurnAction.MOVE_DOWN);
-    }
-
-    /* add optimal directions to actions that need to be taken */
-    private void addDirectionsToDesiredActions(double netDirection, TurnAction positiveAction, TurnAction negativeAction) {
-
-        TurnAction actionsToAdd;
-        int increment;
-
-        if(netDirection > 0) {
-            actionsToAdd = negativeAction;
-            increment = -1;
-        } else {
-            actionsToAdd = positiveAction;
-            increment = 1;
-        }
-
-        while(netDirection != 0) {
-            actionsToTake.add(actionsToAdd);
-            netDirection += increment;
-        }
-    }
-
-    private boolean hasNotMoved(Point currentLocation) {
-
-        return previousAction != null && isMovingAction(previousAction) && currentLocation.equals(previousLocation);
-    }
-
-    /** TileType Helper Methods*/
-
-    /* check if a tile is an ore */
-    private boolean isOre(TileType toEvaluate) {
-        return toEvaluate.equals(TileType.RESOURCE_DIAMOND) || toEvaluate.equals(TileType.RESOURCE_RUBY) || toEvaluate.equals(TileType.RESOURCE_EMERALD);
-    }
-
-    /* check if the correct shop*/
-    public boolean isCorrectShopColor(TileType shopType) {
-        return (shopType.equals(TileType.RED_MARKET) && isRedPlayer) || (shopType.equals(TileType.BLUE_MARKET) && !isRedPlayer );
-    }
-
-    public boolean isMovingAction(TurnAction targetAction) {
-
-        return targetAction.equals(TurnAction.MOVE_UP) || targetAction.equals(TurnAction.MOVE_DOWN)|| targetAction.equals(TurnAction.MOVE_LEFT)|| targetAction.equals(TurnAction.MOVE_RIGHT);
-    }
-
-    public TileType getCorrectShop() {
-        if(isRedPlayer) {
-            return TileType.RED_MARKET;
-        } else {
-            return TileType.BLUE_MARKET;
-        }
-    }
+  }
 }

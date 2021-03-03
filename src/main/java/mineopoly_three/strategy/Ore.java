@@ -5,13 +5,16 @@ import mineopoly_three.tiles.TileType;
 
 import java.awt.*;
 
+/**
+ * Ore Class containing important details about an ore and how to prioritize them
+ */
 public class Ore {
 
     private final double SELL_WEIGHT = 10;
-    private Point location;
-    private int turnsToMine;
-    private int maxDist;
-    private ItemType resourceType;
+    private final Point location;
+    private final int turnsToMine;
+    private final int maxDist;
+    private final ItemType resourceType;
     private double referenceAngle;
     private double orePriority;
 
@@ -30,6 +33,10 @@ public class Ore {
         return referenceAngle;
     }
 
+    public void setReferenceAngle(double referenceAngle) {
+        this.referenceAngle = referenceAngle;
+    }
+
     public double getOrePriority() {
         return orePriority;
     }
@@ -42,10 +49,6 @@ public class Ore {
         return turnsToMine;
     }
 
-    public void setReferenceAngle(double referenceAngle) {
-        this.referenceAngle = referenceAngle;
-    }
-
     public void setOrePriority(double sellValue, Point currentLocation) {
 
         double distanceFromOre = Distance.getDistanceBetweenPoints(currentLocation, location).getMagnitude();
@@ -55,7 +58,7 @@ public class Ore {
         orePriority = weightedPrice + weightedDistance;
     }
 
-    /* given a resource tile, find the associated itemtype */
+    /* given a resource tile, find the associated itemType */
     private ItemType getResourceType(TileType tileType) {
         return switch (tileType) {
             case RESOURCE_DIAMOND -> ItemType.DIAMOND;
